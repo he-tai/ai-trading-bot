@@ -1,0 +1,46 @@
+{
+  "trading": {
+    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT"],
+    "default_leverage": 3,
+    "max_leverage": 16,
+    "min_position_percent": 3,
+    "max_position_percent": 15,
+    "reserve_percent": 20,
+    "cooldown_minutes_per_symbol": 25,
+    "prevent_same_direction_add": true
+  },
+  "risk": {
+    "max_daily_loss_percent": 4,
+    "max_consecutive_losses": 4,
+    "stop_loss_default_percent": 1.4,
+    "take_profit_default_percent": 3.2,
+    "min_confidence_to_open": 0.66,
+    "min_atr_percent": 0.30,
+    "max_atr_percent": 4.8,
+    "max_total_notional_percent": 140,
+    "require_1h_4h_trend_alignment": true
+  },
+  "ai": {
+    "model": "deepseek-reasoner",
+    "temperature": 0.3,
+    "max_tokens": 2000,
+    "timeout_seconds": 300
+  },
+  "schedule": {
+    "interval_seconds": 240,
+    "retry_times": 3,
+    "retry_delay_seconds": 5
+  },
+  "news": {
+    "rss_fetch_count": 12,
+    "cryptocompare_enabled": true,
+    "cryptocompare_limit": 8,
+    "prompt_headlines": 5,
+    "block_open_on_risk_off": true,
+    "risk_off_min_hack_hits": 1,
+    "macro_caution_min_hits": 3,
+    "macro_extra_confidence": 0.06,
+    "symbol_tailwind_min_hits": 2,
+    "symbol_tailwind_confidence_delta": -0.03
+  }
+}
