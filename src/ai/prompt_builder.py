@@ -4,8 +4,8 @@ class PromptBuilder:
     def __init__(self):
         pass
     
-    def build_prompt(self, market_analyses, account_summary, position_summary, config, sentiment_summary=None):
-        """构建完整的提示词。sentiment_summary 可选，含恐惧贪婪指数、新闻等"""
+    def build_prompt(self, market_analyses, account_summary, position_summary, config, sentiment_summary=None, performance_feedback=None):
+        """构建完整的提示词。sentiment_summary 可选，含恐惧贪婪指数、新闻等。performance_feedback 为历史表现反馈"""
         prompt_parts = []
         
         # 添加情绪与新闻（若有）
@@ -38,6 +38,10 @@ class PromptBuilder:
                         f"宏观监管类标题计数≈{hints.get('macro_stress_hits')} | "
                         f"安全类≈{hints.get('hack_hits')}"
                     )
+                    # 新增：情感分析结果
+                    sentiment_score = hints.get('sentiment_score', 0)
+                    sentiment_class = hints.get('sentiment_classification', 'neutral')
+                    prompt_parts.append(f"  新闻情感评分: {sentiment_score} ({sentiment_class})")
                     prompt_parts.append(
                         "  (说明: 程序可能据此暂停新开仓或提高开仓置信度阈值，请与技术面综合判断)"
                     )
@@ -84,6 +88,26 @@ class PromptBuilder:
                 prompt_parts.append(f"ATR: {_fmt(ind.get('atr'), '{:.2f}')}")
                 bb = ind.get('bollinger_bands') or {}
                 prompt_parts.append(f"布林带: 上轨 {_fmt(bb.get('upper'), '{:.2f}')} | 中轨 {_fmt(bb.get('middle'), '{:.2f}')} | 下轨 {_fmt(bb.get('lower'), '{:.2f}')}")
+                
+                # ADX趋势强度指标
+                adx = ind.get('adx') or {}
+                prompt_parts.append(f"ADX趋势强度: {_fmt(adx.get('adx'), '{:.1f}')} | +DI: {_fmt(adx.get('plus_di'), '{:.1f}')} | -DI: {_fmt(adx.get('minus_di'), '{:.1f}')}")
+                
+                # 成交量分析
+                vol = ind.get('volume_analysis') or {}
+                prompt_parts.append(f"成交量比率: {_fmt(vol.get('volume_ratio'), '{:.2f}')} | 量价趋势: {_fmt(vol.get('volume_trend'), '{:.2f}')}")
+                
+                # 支撑阻力位
+                sr = ind.get('support_resistance') or {}
+                resistance = sr.get('resistance', [])
+                support = sr.get('support', [])
+                if resistance:
+                    res_str = ", ".join([f"{r:.2f}" for r in resistance[:2]])
+                    prompt_parts.append(f"阻力位: {res_str}")
+                if support:
+                    sup_str = ", ".join([f"{s:.2f}" for s in support[:2]])
+                    prompt_parts.append(f"支撑位: {sup_str}")
+                
                 # 4h 周期补充最近 K 线（供形态参考）
                 if interval == "4h" and "df" in data and data["df"] is not None and len(data["df"]) >= 6:
                     df = data["df"].tail(6)
@@ -99,6 +123,20 @@ class PromptBuilder:
         prompt_parts.append(f"仓位大小: {config['trading']['min_position_percent']}%-{config['trading']['max_position_percent']}%")
         prompt_parts.append(f"默认止盈: {config['risk']['take_profit_default_percent']}% | 默认止损: {config['risk']['stop_loss_default_percent']}%")
         prompt_parts.append(f"每日最大亏损: {config['risk']['max_daily_loss_percent']}% | 最大连续亏损: {config['risk']['max_consecutive_losses']}次")
+        prompt_parts.append("")
+        
+        # 添加历史表现反馈（若有）
+        if performance_feedback:
+            prompt_parts.append("# 历史交易表现反馈")
+            prompt_parts.append(performance_feedback)
+            prompt_parts.append("")
+        
+        prompt_parts.append("# 技术指标使用指南")
+        prompt_parts.append("- ADX > 25 表示趋势强劲，< 20 表示震荡市")
+        prompt_parts.append("- 成交量比率 > 1.5 表示放量，< 0.5 表示缩量")
+        prompt_parts.append("- 量价趋势 > 1 表示上涨放量，< 1 表示下跌放量")
+        prompt_parts.append("- 支撑阻力位可用于设置止盈止损目标")
+        prompt_parts.append("- 开仓前请确认：趋势强度(ADX) + 方向(+DI/-DI) + 成交量确认")
         prompt_parts.append("")
         
         # 添加决策要求

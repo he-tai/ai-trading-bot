@@ -9,6 +9,21 @@ class TradeExecutor:
         self.risk_manager = risk_manager
         self.retry_times = 3
         self.retry_delay = 5
+        # 移动止损配置
+        self.trailing_stop_config = {
+            'activation_percent': 1.0,  # 盈利1%后激活移动止损
+            'trail_percent': 0.5,       # 回撤0.5%触发止损
+            'min_trail_amount': 0.1     # 最小移动距离(防止频繁调整)
+        }
+        # 分批止盈配置
+        self.partial_tp_config = {
+            'enabled': True,
+            'levels': [
+                {'percent': 50, 'target_percent': 1.5},  # 50%仓位在1.5%止盈
+                {'percent': 30, 'target_percent': 3.0},  # 30%仓位在3.0%止盈
+                {'percent': 20, 'target_percent': 5.0}   # 20%仓位在5.0%止盈
+            ]
+        }
     
     def execute_trade(self, symbol, trade_decision, account_balance):
         """执行交易"""
@@ -79,10 +94,21 @@ class TradeExecutor:
             
             # 取消该币种已有止盈止损，避免重复或数量不一致
             self._cancel_tp_sl_orders(symbol)
-            # 设置止盈止损（使用 STOP_MARKET/TAKE_PROFIT_MARKET，触发后市价成交更可靠）
-            if take_profit > 0 and total_size > 0:
-                tp_price = entry_price * (1 + take_profit / 100)
-                self.set_take_profit(symbol, 'SELL', tp_price, total_size, pos_side)
+            
+            # 设置止盈止损：支持分批止盈或单一止盈
+            risk_config = self.risk_manager.config.get('risk', {})
+            enable_partial_tp = risk_config.get('enable_partial_take_profit', False)
+            
+            if enable_partial_tp:
+                # 分批止盈
+                self._set_partial_take_profits(symbol, 'SELL', entry_price, total_size, pos_side, risk_config)
+            else:
+                # 单一止盈（原逻轼）
+                if take_profit > 0 and total_size > 0:
+                    tp_price = entry_price * (1 + take_profit / 100)
+                    self.set_take_profit(symbol, 'SELL', tp_price, total_size, pos_side)
+            
+            # 止损始终使用全部仓位
             if stop_loss < 0 and total_size > 0:
                 sl_price = entry_price * (1 + stop_loss / 100)
                 self.set_stop_loss(symbol, 'SELL', sl_price, total_size, pos_side)
@@ -133,10 +159,21 @@ class TradeExecutor:
             
             # 取消该币种已有止盈止损，避免重复或数量不一致
             self._cancel_tp_sl_orders(symbol)
-            # 设置止盈止损（使用 STOP_MARKET/TAKE_PROFIT_MARKET，触发后市价成交更可靠）
-            if take_profit > 0 and total_size > 0:
-                tp_price = entry_price * (1 - take_profit / 100)
-                self.set_take_profit(symbol, 'BUY', tp_price, total_size, pos_side)
+            
+            # 设置止盈止损：支持分批止盈或单一止盈
+            risk_config = self.risk_manager.config.get('risk', {})
+            enable_partial_tp = risk_config.get('enable_partial_take_profit', False)
+            
+            if enable_partial_tp:
+                # 分批止盈
+                self._set_partial_take_profits(symbol, 'BUY', entry_price, total_size, pos_side, risk_config)
+            else:
+                # 单一止盈（原逻轼）
+                if take_profit > 0 and total_size > 0:
+                    tp_price = entry_price * (1 - take_profit / 100)
+                    self.set_take_profit(symbol, 'BUY', tp_price, total_size, pos_side)
+            
+            # 止损始终使用全部仓位
             if stop_loss < 0 and total_size > 0:
                 sl_price = entry_price * (1 - stop_loss / 100)
                 self.set_stop_loss(symbol, 'BUY', sl_price, total_size, pos_side)
@@ -163,6 +200,48 @@ class TradeExecutor:
             time.sleep(0.3)  # 等待交易所处理
         except Exception as e:
             print(f"取消 {symbol} 已有订单时忽略: {e}")
+    
+    def _set_partial_take_profits(self, symbol, side, entry_price, total_size, position_side, risk_config):
+        """
+        设置分批止盈订单
+        :param symbol: 交易对
+        :param side: SELL(多头止盈) 或 BUY(空头止盈)
+        :param entry_price: 入场价格
+        :param total_size: 总持仓量
+        :param position_side: LONG 或 SHORT
+        :param risk_config: 风险配置
+        """
+        if total_size <= 0:
+            return
+        
+        partial_levels = risk_config.get('partial_tp_levels', self.partial_tp_config['levels'])
+        
+        remaining_size = total_size
+        for i, level in enumerate(partial_levels):
+            # 计算该级别的仓位大小
+            level_percent = level['percent'] / 100
+            if i == len(partial_levels) - 1:
+                # 最后一级使用剩余全部仓位（避免精度损失）
+                level_size = remaining_size
+            else:
+                level_size = total_size * level_percent
+                level_size = self.adjust_position_size(symbol, level_size)
+            
+            if level_size <= 0:
+                continue
+            
+            # 计算止盈价格
+            target_percent = level['target_percent']
+            if side == 'SELL':  # 多头止盈
+                tp_price = entry_price * (1 + target_percent / 100)
+            else:  # 空头止盈
+                tp_price = entry_price * (1 - target_percent / 100)
+            
+            # 设置止盈订单
+            self.set_take_profit(symbol, side, tp_price, level_size, position_side)
+            
+            remaining_size -= level_size
+            print(f"分批止盈 {i+1}: {level_size:.6f} @ {tp_price:.2f} ({target_percent}%)")
 
     def set_take_profit(self, symbol, side, price, quantity, position_side=None):
         """设置止盈。使用 TAKE_PROFIT_MARKET，触发后市价成交，避免 LIMIT 触发后不成交"""
@@ -198,6 +277,45 @@ class TradeExecutor:
             return order
         except Exception as e:
             print(f"设置止损失败: {e}")
+            return None
+    
+    def update_trailing_stop(self, symbol, position, entry_price, current_price, side):
+        """
+        更新移动止损
+        :param symbol: 交易对
+        :param position: 持仓信息
+        :param entry_price: 入场价格
+        :param current_price: 当前价格
+        :param side: SELL(多头) 或 BUY(空头)
+        :return: 新的止损价格，如果不需要调整则返回None
+        """
+        try:
+            # 计算盈利百分比
+            if side == 'SELL':  # 多头持仓
+                profit_percent = ((current_price - entry_price) / entry_price) * 100
+            else:  # 空头持仓
+                profit_percent = ((entry_price - current_price) / entry_price) * 100
+            
+            # 检查是否达到激活阈值
+            if profit_percent < self.trailing_stop_config['activation_percent']:
+                return None
+            
+            # 计算新的止损价格
+            if side == 'SELL':  # 多头：止损价格跟随价格上涨
+                new_stop_price = current_price * (1 - self.trailing_stop_config['trail_percent'] / 100)
+                # 确保新止损价格高于当前止损价格（只上移不下移）
+                current_stop = position.get('stop_loss_price', 0)
+                if current_stop and new_stop_price <= current_stop + self.trailing_stop_config['min_trail_amount']:
+                    return None  # 不需要调整
+                return new_stop_price
+            else:  # 空头：止损价格跟随价格下跌
+                new_stop_price = current_price * (1 + self.trailing_stop_config['trail_percent'] / 100)
+                current_stop = position.get('stop_loss_price', 0)
+                if current_stop and new_stop_price >= current_stop - self.trailing_stop_config['min_trail_amount']:
+                    return None  # 不需要调整
+                return new_stop_price
+        except Exception as e:
+            print(f"计算移动止损失败: {e}")
             return None
     
     def calculate_position_size(self, symbol, position_percent, account_balance, leverage=1):

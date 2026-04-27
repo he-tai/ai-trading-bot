@@ -88,3 +88,92 @@ class Indicators:
         mf_ratio = positive_mf / negative_mf
         mfi = 100 - (100 / (1 + mf_ratio))
         return mfi.iloc[-1] if not mfi.empty else None
+    
+    @staticmethod
+    def calculate_adx(highs, lows, closes, period=14):
+        """计算ADX趋势强度指标"""
+        # 计算TR
+        tr1 = highs - lows
+        tr2 = abs(highs - closes.shift(1))
+        tr3 = abs(lows - closes.shift(1))
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        
+        # 计算DM
+        high_diff = highs - highs.shift(1)
+        low_diff = lows.shift(1) - lows
+        
+        plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0)
+        minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0)
+        
+        # 平滑处理
+        atr = tr.rolling(window=period).mean()
+        plus_di = 100 * plus_dm.rolling(window=period).mean() / atr
+        minus_di = 100 * minus_dm.rolling(window=period).mean() / atr
+        
+        # 计算DX和ADX
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        adx = dx.rolling(window=period).mean()
+        
+        return {
+            "adx": adx.iloc[-1] if not adx.empty else None,
+            "plus_di": plus_di.iloc[-1] if not plus_di.empty else None,
+            "minus_di": minus_di.iloc[-1] if not minus_di.empty else None
+        }
+    
+    @staticmethod
+    def calculate_volume_analysis(volumes, closes, period=20):
+        """成交量分析"""
+        # 平均成交量
+        avg_volume = volumes.rolling(window=period).mean()
+        # 成交量比率（当前/平均）
+        volume_ratio = volumes / avg_volume
+        
+        # 量价关系：上涨日成交量 vs 下跌日成交量
+        price_change = closes.diff()
+        up_volume = volumes.where(price_change > 0, 0).rolling(window=period).mean()
+        down_volume = volumes.where(price_change < 0, 0).rolling(window=period).mean()
+        volume_trend = up_volume / down_volume.replace(0, np.nan)
+        
+        return {
+            "current_volume": volumes.iloc[-1] if not volumes.empty else None,
+            "avg_volume": avg_volume.iloc[-1] if not avg_volume.empty else None,
+            "volume_ratio": volume_ratio.iloc[-1] if not volume_ratio.empty else None,
+            "volume_trend": volume_trend.iloc[-1] if not volume_trend.empty else None
+        }
+    
+    @staticmethod
+    def calculate_support_resistance(highs, lows, closes, lookback=50):
+        """识别支撑阻力位"""
+        if len(closes) < lookback:
+            lookback = len(closes)
+        
+        recent_highs = highs.tail(lookback)
+        recent_lows = lows.tail(lookback)
+        
+        # 使用局部极值点识别支撑阻力
+        # 阻力位：局部高点
+        resistance_levels = []
+        for i in range(2, len(recent_highs) - 2):
+            if recent_highs.iloc[i] >= recent_highs.iloc[i-1] and \
+               recent_highs.iloc[i] >= recent_highs.iloc[i-2] and \
+               recent_highs.iloc[i] >= recent_highs.iloc[i+1] and \
+               recent_highs.iloc[i] >= recent_highs.iloc[i+2]:
+                resistance_levels.append(recent_highs.iloc[i])
+        
+        # 支撑位：局部低点
+        support_levels = []
+        for i in range(2, len(recent_lows) - 2):
+            if recent_lows.iloc[i] <= recent_lows.iloc[i-1] and \
+               recent_lows.iloc[i] <= recent_lows.iloc[i-2] and \
+               recent_lows.iloc[i] <= recent_lows.iloc[i+1] and \
+               recent_lows.iloc[i] <= recent_lows.iloc[i+2]:
+                support_levels.append(recent_lows.iloc[i])
+        
+        # 排序并返回最近的几个级别
+        resistance_levels = sorted(list(set(resistance_levels)), reverse=True)[:3]
+        support_levels = sorted(list(set(support_levels)))[:3]
+        
+        return {
+            "resistance": resistance_levels,
+            "support": support_levels
+        }

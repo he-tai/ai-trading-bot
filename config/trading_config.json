@@ -18,7 +18,17 @@
     "min_atr_percent": 0.30,
     "max_atr_percent": 4.8,
     "max_total_notional_percent": 140,
-    "require_1h_4h_trend_alignment": true
+    "max_correlated_exposure_percent": 40,
+    "require_1h_4h_trend_alignment": true,
+    "enable_partial_take_profit": true,
+    "enable_trailing_stop": true,
+    "trailing_stop_activation_percent": 1.0,
+    "trailing_stop_trail_percent": 0.5,
+    "partial_tp_levels": [
+      {"percent": 50, "target_percent": 1.5},
+      {"percent": 30, "target_percent": 3.0},
+      {"percent": 20, "target_percent": 5.0}
+    ]
   },
   "ai": {
     "model": "deepseek-reasoner",

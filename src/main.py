@@ -16,6 +16,7 @@ from trading.risk_manager import RiskManager
 from trading.position_manager import PositionManager
 from trading.trade_executor import TradeExecutor
 from utils.decision_logger import DecisionLogger
+from utils.trade_performance import TradePerformanceTracker
 
 class TradingBot:
     def __init__(self):
@@ -82,6 +83,9 @@ class TradingBot:
         
         # 决策日志（写入 logs/decisions.log）
         self.decision_logger = DecisionLogger()
+        
+        # 交易表现跟踪
+        self.performance_tracker = TradePerformanceTracker()
 
     def _extract_indicator(self, analysis, interval, key):
         data = analysis.get('market_data', {}).get(interval, {}).get('indicators', {})
@@ -113,6 +117,39 @@ class TradingBot:
             return True
         atr_percent = (atr_1h / price) * 100
         return self.min_atr_percent <= atr_percent <= self.max_atr_percent
+
+    def _is_volume_confirmed(self, analysis, action):
+        """成交量确认：开仓需要有足够的成交量支持"""
+        if action not in ('BUY_OPEN', 'SELL_OPEN'):
+            return True
+        
+        vol_data = analysis.get('market_data', {}).get('1h', {}).get('volume_analysis', {})
+        volume_ratio = vol_data.get('volume_ratio')
+        
+        # 如果没有成交量数据，默认允许（避免误杀）
+        if volume_ratio is None:
+            return True
+        
+        # 成交量比率 < 0.3 表示极度缩量，可能是假突破
+        if volume_ratio < 0.3:
+            return False
+        
+        return True
+
+    def _is_trend_strong_enough(self, analysis, action):
+        """趋势强度过滤：ADX > 20 才认为是有效趋势"""
+        if action not in ('BUY_OPEN', 'SELL_OPEN'):
+            return True
+        
+        adx_data = analysis.get('market_data', {}).get('1h', {}).get('adx', {})
+        adx_value = adx_data.get('adx')
+        
+        # 如果没有ADX数据，默认允许（兼容旧逻辑）
+        if adx_value is None:
+            return True
+        
+        # ADX < 20 表示震荡市，不开仓
+        return adx_value >= 20
 
     def _find_current_position(self, symbol, positions):
         for p in positions:
@@ -157,6 +194,12 @@ class TradingBot:
 
         if not self._is_volatility_valid(market_analysis):
             return False, f"ATR波动率不在区间({self.min_atr_percent}%~{self.max_atr_percent}%)"
+        
+        if not self._is_volume_confirmed(market_analysis, action):
+            return False, "成交量极度缩量，可能是假突破"
+        
+        if not self._is_trend_strong_enough(market_analysis, action):
+            return False, "ADX趋势强度不足(<20)，震荡市不开仓"
 
         if self.prevent_same_direction_add:
             pos = self._find_current_position(symbol, current_positions)
@@ -249,13 +292,19 @@ class TradingBot:
                 self.decision_logger.log_cycle_start(cycle, account_summary, position_summary, sentiment_summary)
                 self.decision_logger.log_market_summary(market_analyses)
                 
+                # 3.6 获取历史表现反馈（每 5 个周期更新一次）
+                performance_feedback = None
+                if cycle % 5 == 0:
+                    performance_feedback = self.performance_tracker.get_feedback_for_ai(days=30)
+                
                 # 4. 构建AI提示词
                 prompt = self.prompt_builder.build_prompt(
                     market_analyses,
                     account_summary,
                     position_summary,
                     self.config,
-                    sentiment_summary
+                    sentiment_summary,
+                    performance_feedback
                 )
                 
                 # 5. 获取AI决策
@@ -309,8 +358,10 @@ class TradingBot:
                                 self.decision_logger.log_execution(symbol, action, False, risk_failed=[gate_reason])
                                 continue
                             # 检查风险
+                            # 为风险检查添加 symbol 信息（用于相关性检查）
+                            symbol_decision_with_symbol = {**symbol_decision, 'symbol': symbol}
                             risk_check = self.risk_manager.check_risk(
-                                symbol_decision,
+                                symbol_decision_with_symbol,
                                 account_summary['total_balance'],
                                 position_summary['positions'],
                                 account_summary['margin_level']

@@ -242,19 +242,38 @@ class NewsDataManager:
         news_policy = news_policy or {}
         trading_symbols = trading_symbols or []
         counts = {k: 0 for k in self.keyword_map.keys()}
+            
+        # 情感分析：简单基于关键词的情感倾向评分
+        positive_keywords = ['bullish', 'rally', 'surge', 'breakout', 'pump', 'moon', 'adoption', 'partnership', 'upgrade', 'innovation']
+        negative_keywords = ['crash', 'dump', 'hack', 'exploit', 'ban', 'regulation', 'sec', 'lawsuit', 'scam', 'fraud', 'breach']
+            
+        sentiment_score = 0  # 正值表示乐观，负值表示悲观
+        total_analyzed = 0
+            
         for item in news_list:
-            title = (item.get("title") or "").lower()
+            title = (item.get('title') or '').lower()
             for key, aliases in self.keyword_map.items():
                 if any(alias in title for alias in aliases):
                     counts[key] += 1
+                
+            # 简单情感分析
+            title_words = title.split()
+            pos_count = sum(1 for word in title_words if any(pk in title for pk in positive_keywords))
+            neg_count = sum(1 for word in title_words if any(nk in title for nk in negative_keywords))
+            sentiment_score += (pos_count - neg_count)
+            total_analyzed += 1
+            
+        # 归一化情感评分 (-1 到 1)
+        normalized_sentiment = sentiment_score / max(total_analyzed, 1)
+            
         top_keywords = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         top_keywords = [k for k in top_keywords if k[1] > 0][:5]
-
+    
         hack_hits = counts.get("HACK", 0)
         macro_hits = counts.get("FED", 0) + counts.get("SEC", 0)
         risk_off_min = int(news_policy.get("risk_off_min_hack_hits", 1))
         risk_off = news_policy.get("block_open_on_risk_off", True) and hack_hits >= risk_off_min
-
+    
         symbol_hits = {}
         for sym in trading_symbols:
             if not isinstance(sym, str):
@@ -268,16 +287,18 @@ class NewsDataManager:
             aliases.update(km)
             n = 0
             for item in news_list:
-                t = (item.get("title") or "").lower()
+                t = (item.get('title') or '').lower()
                 if any(a in t for a in aliases if a):
                     n += 1
             symbol_hits[sym] = n
-
+    
         strategy_hints = {
             "risk_off": bool(risk_off),
             "hack_hits": hack_hits,
             "macro_stress_hits": macro_hits,
             "symbol_title_hits": symbol_hits,
+            "sentiment_score": round(normalized_sentiment, 2),  # 新增：情感评分
+            "sentiment_classification": "bullish" if normalized_sentiment > 0.2 else ("bearish" if normalized_sentiment < -0.2 else "neutral")
         }
         return {
             "total_news": len(news_list),

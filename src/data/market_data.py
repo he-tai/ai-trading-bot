@@ -38,6 +38,7 @@ class MarketDataManager:
         close_prices = df["close"]
         high_prices = df["high"]
         low_prices = df["low"]
+        volumes = df["volume"]
         
         indicators = {
             "rsi": self.indicators.calculate_rsi(close_prices),
@@ -49,7 +50,10 @@ class MarketDataManager:
             "atr": self.indicators.calculate_atr(high_prices, low_prices, close_prices),
             "bollinger_bands": self.indicators.calculate_bollinger_bands(close_prices),
             "kdj": self.indicators.calculate_kdj(high_prices, low_prices, close_prices),
-            "mfi": self.indicators.calculate_mfi(high_prices, low_prices, close_prices, df["volume"])
+            "mfi": self.indicators.calculate_mfi(high_prices, low_prices, close_prices, volumes),
+            "adx": self.indicators.calculate_adx(high_prices, low_prices, close_prices),
+            "volume_analysis": self.indicators.calculate_volume_analysis(volumes, close_prices),
+            "support_resistance": self.indicators.calculate_support_resistance(high_prices, low_prices, close_prices)
         }
         return indicators
     
