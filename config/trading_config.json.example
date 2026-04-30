@@ -1,6 +1,6 @@
 {
   "trading": {
-    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"],  // 交易币种列表
+    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "XRPUSDT", "ADAUSDT", "LINKUSDT", "LTCUSDT", "AVAXUSDT", "1000SHIBUSDT", "SUIUSDT"],  // 交易币种列表（主流高流动性）
     "default_leverage": 5,  // 默认杠杆倍数（更激进）
     "max_leverage": 20,  // 最大杠杆倍数（更激进）
     "min_position_percent": 5,  // 最小仓位占比（%）
