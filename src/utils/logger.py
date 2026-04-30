@@ -11,6 +11,7 @@ class TeeOutput:
         self.stream = stream
         self.log_path = log_path
         self._at_line_start = True
+        self._write_failed = False
         self._ensure_log_dir()
     
     def _ensure_log_dir(self):
@@ -43,8 +44,20 @@ class TeeOutput:
                 with open(self.log_path, "a", encoding="utf-8") as f:
                     f.write(formatted)
                     f.flush()
+                # 文件写入恢复后，重置失败标记
+                self._write_failed = False
             except (IOError, OSError):
-                pass
+                # 明确告警：容器 stdout 有内容但文件日志写不进去时，便于快速定位权限/挂载问题
+                if not self._write_failed:
+                    try:
+                        sys.__stderr__.write(
+                            f"[WARN] 日志文件写入失败: {self.log_path}，"
+                            "请检查宿主机目录挂载与权限（如 ./logs -> /app/logs）。\n"
+                        )
+                        sys.__stderr__.flush()
+                    except Exception:
+                        pass
+                    self._write_failed = True
     
     def flush(self):
         self.stream.flush()

@@ -1,24 +1,24 @@
 {
   "trading": {
-    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "B2USDT"],  // 交易币种列表
-    "default_leverage": 3,  // 默认杠杆倍数
-    "max_leverage": 16,  // 最大杠杆倍数（均衡偏激进，抗回撤微调）
-    "min_position_percent": 3,  // 最小仓位占比（%）
-    "max_position_percent": 15,  // 最大仓位占比（%）
-    "reserve_percent": 20,  // 预留资金占比（%）
-    "cooldown_minutes_per_symbol": 25,  // 同币种冷却时间（分钟）
-    "prevent_same_direction_add": true  // 禁止同向重复加仓
+    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"],  // 交易币种列表
+    "default_leverage": 5,  // 默认杠杆倍数（更激进）
+    "max_leverage": 20,  // 最大杠杆倍数（更激进）
+    "min_position_percent": 5,  // 最小仓位占比（%）
+    "max_position_percent": 22,  // 最大仓位占比（%）
+    "reserve_percent": 12,  // 预留资金占比（%）
+    "cooldown_minutes_per_symbol": 10,  // 同币种冷却时间（分钟）
+    "prevent_same_direction_add": false  // 允许同向加仓（激进）
   },
   "risk": {
-    "max_daily_loss_percent": 4,  // 每日最大亏损限制（%）
-    "max_consecutive_losses": 4,  // 最大连续亏损次数
+    "max_daily_loss_percent": 6,  // 每日最大亏损限制（%）
+    "max_consecutive_losses": 6,  // 最大连续亏损次数
     "stop_loss_default_percent": 1.4,  // 默认止损百分比（%）
-    "take_profit_default_percent": 3.2,  // 默认止盈百分比（%）
-    "min_confidence_to_open": 0.66,  // 最低开仓置信度
-    "min_atr_percent": 0.30,
-    "max_atr_percent": 4.8,
-    "max_total_notional_percent": 140,
-    "require_1h_4h_trend_alignment": true
+    "take_profit_default_percent": 3.8,  // 默认止盈百分比（%）
+    "min_confidence_to_open": 0.58,  // 最低开仓置信度（降低门槛）
+    "min_atr_percent": 0.18,
+    "max_atr_percent": 6.2,
+    "max_total_notional_percent": 200,
+    "require_1h_4h_trend_alignment": false
   },
   "ai": {
     "model": "deepseek-reasoner",  // AI 模型名称
@@ -27,7 +27,7 @@
     "timeout_seconds": 300
   },
   "schedule": {
-    "interval_seconds": 240,  // 交易周期（秒）
+    "interval_seconds": 180,  // 交易周期（秒）
     "retry_times": 3,  // 重试次数
     "retry_delay_seconds": 5  // 重试延迟（秒）
   },
@@ -36,11 +36,11 @@
     "cryptocompare_enabled": true,  // 是否合并 CryptoCompare 免费新闻
     "cryptocompare_limit": 8,
     "prompt_headlines": 5,  // 写入 AI 提示词的新闻条数
-    "block_open_on_risk_off": true,  // 安全类关键词达阈值时暂停新开仓
+    "block_open_on_risk_off": false,  // 激进模式：不因风险新闻完全阻断新开仓
     "risk_off_min_hack_hits": 1,
     "macro_caution_min_hits": 3,  // FED+SEC 标题累计达此值则提高置信度门槛
-    "macro_extra_confidence": 0.06,
+    "macro_extra_confidence": 0.03,
     "symbol_tailwind_min_hits": 2,  // 某币种相关标题条数达此值则略降开仓置信度门槛
-    "symbol_tailwind_confidence_delta": -0.03
+    "symbol_tailwind_confidence_delta": -0.05
   }
 }
